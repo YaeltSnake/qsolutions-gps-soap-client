@@ -1,16 +1,18 @@
-# Compiled class file
+# ==========================================
+# Java compiled output
+# ==========================================
 *.class
+build/
+dist/
 
-# Log file
+# ==========================================
+# Logs
+# ==========================================
 *.log
 
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
+# ==========================================
+# Package artifacts (never commit binaries)
+# ==========================================
 *.jar
 *.war
 *.nar
@@ -19,6 +21,32 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# ==========================================
+# NetBeans IDE files
+# ==========================================
+nbproject/private/
+nbproject/Makefile-*.mk
+nbproject/Package-*.bash
+nbbuild/
+nbdist/
+
+# ==========================================
+# Secrets and environment config
+# ==========================================
+config.properties
+.env
+*.env
+
+# ==========================================
+# OS files
+# ==========================================
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# JVM crash logs
+# ==========================================
 hs_err_pid*
 replay_pid*
+*.ctxt
+.mtj.tmp/
