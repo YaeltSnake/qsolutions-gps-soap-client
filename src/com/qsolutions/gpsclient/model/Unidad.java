@@ -6,8 +6,8 @@ import java.time.LocalTime;
 /**
  * Represents a fleet vehicle unit participating in GPS tracking.
  *
- * Each unit has its own operational window and active status,
- * allowing independent scheduling per vehicle.
+ * Units can have a fixed operational window (predefined by fleet manager)
+ * or a manually configured one set by the operator at session start.
  *
  * Phase 2: coordinates will be sourced automatically via Flespi/SinoTrack API.
  */
@@ -16,35 +16,44 @@ public class Unidad {
     private final String numUnidad;
     private BigDecimal latitud;
     private BigDecimal longitud;
-
-    // Per-unit operational window
     private LocalTime horaInicio;
     private LocalTime horaFin;
-
-    // Whether this unit participates in today's pulse cycle
     private boolean activa;
+    private final boolean horarioFijo; // true = schedule set by fleet manager, not operator
 
+    /** Constructor for units with manually configured schedule. */
     public Unidad(String numUnidad) {
-        this.numUnidad  = numUnidad;
-        this.horaInicio = LocalTime.of(8, 0);   // default 8am
-        this.horaFin    = LocalTime.of(18, 0);  // default 6pm
-        this.activa     = false; // inactive by default — operator must activate explicitly
+        this.numUnidad   = numUnidad;
+        this.horaInicio  = LocalTime.of(8, 0);
+        this.horaFin     = LocalTime.of(18, 0);
+        this.activa      = false;
+        this.horarioFijo = false;
+    }
+
+    /** Constructor for units with a fixed predefined schedule. */
+    public Unidad(String numUnidad, LocalTime horaInicio, LocalTime horaFin) {
+        this.numUnidad   = numUnidad;
+        this.horaInicio  = horaInicio;
+        this.horaFin     = horaFin;
+        this.activa      = false;
+        this.horarioFijo = true;
     }
 
     // --- Getters ---
-    public String getNumUnidad()    { return numUnidad; }
-    public BigDecimal getLatitud()  { return latitud; }
-    public BigDecimal getLongitud() { return longitud; }
-    public LocalTime getHoraInicio(){ return horaInicio; }
-    public LocalTime getHoraFin()   { return horaFin; }
-    public boolean isActiva()       { return activa; }
+    public String getNumUnidad()     { return numUnidad; }
+    public BigDecimal getLatitud()   { return latitud; }
+    public BigDecimal getLongitud()  { return longitud; }
+    public LocalTime getHoraInicio() { return horaInicio; }
+    public LocalTime getHoraFin()    { return horaFin; }
+    public boolean isActiva()        { return activa; }
+    public boolean isHorarioFijo()   { return horarioFijo; }
 
     // --- Setters ---
-    public void setLatitud(BigDecimal latitud)    { this.latitud = latitud; }
-    public void setLongitud(BigDecimal longitud)  { this.longitud = longitud; }
-    public void setHoraInicio(LocalTime hora)     { this.horaInicio = hora; }
-    public void setHoraFin(LocalTime hora)        { this.horaFin = hora; }
-    public void setActiva(boolean activa)         { this.activa = activa; }
+    public void setLatitud(BigDecimal latitud)   { this.latitud = latitud; }
+    public void setLongitud(BigDecimal longitud) { this.longitud = longitud; }
+    public void setHoraInicio(LocalTime hora)    { this.horaInicio = hora; }
+    public void setHoraFin(LocalTime hora)       { this.horaFin = hora; }
+    public void setActiva(boolean activa)        { this.activa = activa; }
 
     /**
      * Returns true if the current time falls within this unit's operational window.

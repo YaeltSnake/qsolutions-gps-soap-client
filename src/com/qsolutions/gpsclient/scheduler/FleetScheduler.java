@@ -85,23 +85,29 @@ public class FleetScheduler {
      */
     private void configurarUnidad(Unidad unidad) {
         System.out.println("┌─────────────────────────────────────┐");
-        System.out.println("│ Unidad: " + unidad.getNumUnidad());
+        System.out.println("│ Unidad: " + unidad.getNumUnidad()
+                + (unidad.isHorarioFijo() ? " [Horario fijo]" : ""));
         System.out.println("└─────────────────────────────────────┘");
 
         // Step 1 — Activate or skip
         boolean activar = leerSiNo("  ¿Activar esta unidad hoy? (s/n): ");
         if (!activar) {
-            System.out.println("  ↷ Unidad omitida.\n");
+            System.out.println("  Unidad omitida.\n");
             return;
         }
         unidad.setActiva(true);
 
-        // Step 2 — Operational window
-        System.out.println("  Horario de operación (Enter para usar default):");
-        LocalTime inicio = leerHora("  Hora inicio [08:00]: ", LocalTime.of(8, 0));
-        LocalTime fin    = leerHora("  Hora fin    [18:00]: ", LocalTime.of(18, 0));
-        unidad.setHoraInicio(inicio);
-        unidad.setHoraFin(fin);
+        // Step 2 — Operational window (skip if fixed)
+        if (unidad.isHorarioFijo()) {
+            System.out.println("  Horario: " + unidad.getHoraInicio()
+                    + " - " + unidad.getHoraFin() + " (predefinido)");
+        } else {
+            System.out.println("  Horario de operacion (Enter para usar default):");
+            LocalTime inicio = leerHora("  Hora inicio [08:00]: ", LocalTime.of(8, 0));
+            LocalTime fin = leerHora("  Hora fin    [18:00]: ", LocalTime.of(18, 0));
+            unidad.setHoraInicio(inicio);
+            unidad.setHoraFin(fin);
+        }
 
         // Step 3 — Coordinates
         System.out.println("  Coordenadas iniciales:");
@@ -110,8 +116,9 @@ public class FleetScheduler {
         unidad.setLatitud(lat);
         unidad.setLongitud(lon);
 
-        System.out.println("  ✓ " + unidad.getNumUnidad() + 
-                " configurada — " + inicio + " a " + fin + "\n");
+        System.out.println("  ✓ " + unidad.getNumUnidad()
+                + " configurada - " + unidad.getHoraInicio()
+                + " a " + unidad.getHoraFin() + "\n");
     }
 
     // ---------------------------------------------------------------
