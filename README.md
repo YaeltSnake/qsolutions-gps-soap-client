@@ -4,6 +4,7 @@
 
 ![Java](https://img.shields.io/badge/Java-JDK%2025-orange?style=flat-square)
 ![SOAP](https://img.shields.io/badge/Protocol-SOAP%2FXML-blue?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Production-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square)
 
@@ -56,36 +57,43 @@ src/
 
 ## Setup
 
-### 1. Clone the repository
+### Option A — Docker (recommended)
+
+No Java installation required. Just Docker.
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/YaeltSnake/qsolutions-gps-soap-client.git
 cd qsolutions-gps-soap-client
+
+# 2. Configure credentials
+cp config.properties.example config.properties
+# Edit config.properties with your QSolutions credentials
+
+# 3. Run
+docker-compose run fleet-tracker
 ```
 
-### 2. Configure credentials
+> `config.properties` is mounted as a volume — credentials never go inside the image.
+
+### Option B — Local (requires Java 25 + NetBeans)
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/YaeltSnake/qsolutions-gps-soap-client.git
+cd qsolutions-gps-soap-client
+
+# 2. Configure credentials
 cp config.properties.example src/config.properties
-```
+# Edit src/config.properties with your QSolutions credentials
 
-Edit `src/config.properties` with your QSolutions credentials:
-
-```properties
-qsolutions.username=YOUR_USERNAME
-qsolutions.password=YOUR_PASSWORD
-qsolutions.proveedor=Digi-Haul
+# 3. Build and run
+# Open in NetBeans → Clean and Build → Run MainClient.java
+# Or via terminal:
+java -jar dist/GPSWebServicesClient.jar
 ```
 
 > `config.properties` is gitignored — credentials never leave your machine.
-
-### 3. Build and run
-
-Open the project in NetBeans and run `MainClient.java`, or build the JAR:
-
-```bash
-java -jar dist/GPSWebServicesClient.jar
-```
 
 ---
 
@@ -126,6 +134,7 @@ private static final int INTERVALO_MINUTOS = 15; // ← change this value
 | Serialization | XML + XSD | QSolutions contract definition |
 | Scheduling | ScheduledExecutorService | Precise intervals, no framework overhead |
 | Build | Apache Ant (NetBeans) | Lightweight, no Maven/Gradle dependency |
+| Container | Docker + docker-compose | Zero-install deployment for operators |
 
 ---
 
@@ -135,9 +144,13 @@ private static final int INTERVALO_MINUTOS = 15; // ← change this value
 - [x] Per-unit scheduling and individual activation
 - [x] Real-time timestamp generation on every pulse
 - [x] Externalized credentials via config.properties
+- [x] Docker containerization — zero-install deployment
+- [ ] Structured logging with SLF4J/Logback
+- [ ] JavaFX desktop UI for fleet management
+- [ ] Web dashboard with embedded Jetty
 - [ ] Flespi/SinoTrack API integration for automatic coordinate sourcing
-- [ ] Docker containerization for client-side deployment
-- [ ] Unit tests with JUnit
+- [ ] JUnit 5 test suite + GitHub Actions CI/CD
+- [ ] Spring Boot microservices migration
 
 ---
 
