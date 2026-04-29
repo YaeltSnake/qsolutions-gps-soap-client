@@ -1,0 +1,7 @@
+services:
+  fleet-tracker:
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./config.properties:/app/config.properties
