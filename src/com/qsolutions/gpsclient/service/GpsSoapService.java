@@ -6,6 +6,8 @@ import com.qsolutions.gpsclient.model.Unidad;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tempuri.GPSInfo;
 import org.tempuri.Protocolo;
 import org.tempuri.ReceiveGPSInfo;
@@ -21,7 +23,9 @@ import org.tempuri.ReceiveGPSInfoSoap;
  */
 
 public class GpsSoapService {
-    
+
+    private static final Logger log = LoggerFactory.getLogger(GpsSoapService.class);
+
     private final String username;
     private final String password;
     private final String proveedor;
@@ -79,15 +83,13 @@ public class GpsSoapService {
             ReceiveGPSInfoSoap port = service.getReceiveGPSInfoSoap();
             Protocolo respuesta = port.receiveGPSInformationObjeto(info);
 
-            System.out.println("[" + unidad.getNumUnidad() + "] Pulsación enviada — " +
-                    "Procesado: " + respuesta.isProcessed() +
-                    " | Mensaje: " + respuesta.getMessage());
+            log.info("[{}] Pulsacion enviada — Procesado: {} | Mensaje: {}",
+                    unidad.getNumUnidad(), respuesta.isProcessed(), respuesta.getMessage());
 
             return respuesta;
 
         } catch (Exception e) {
-            System.err.println("[" + unidad.getNumUnidad() + "] ERROR al enviar pulsación: "
-                    + e.getMessage());
+            log.error("[{}] ERROR al enviar pulsacion: {}", unidad.getNumUnidad(), e.getMessage());
             return null;
         }
     }

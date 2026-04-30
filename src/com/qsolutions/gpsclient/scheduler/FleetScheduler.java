@@ -12,6 +12,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Orchestrates periodic GPS pulse dispatch for all active fleet units.
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
  */
 public class FleetScheduler {
 
+    private static final Logger log = LoggerFactory.getLogger(FleetScheduler.class);
     private static final int INTERVALO_MINUTOS = 15;
 
     private final GpsSoapService soapService;
@@ -48,11 +51,13 @@ public class FleetScheduler {
         List<Unidad> activas = getUnidadesActivas();
         
         if (activas.isEmpty()) {
+            log.warn("No hay unidades activas. Cerrando servicio.");
             System.out.println("\n⚠ No hay unidades activas. Cerrando servicio.");
             return;
         }
 
         mostrarResumenSesion(activas);
+        log.info("Sesion iniciada — {} unidades activas.", activas.size());
 
         executor.scheduleAtFixedRate(
                 this::enviarRondaDePulsaciones,
@@ -131,13 +136,12 @@ public class FleetScheduler {
      */
     private void enviarRondaDePulsaciones() {
         LocalTime ahora = LocalTime.now();
-        System.out.println("\n[" + ahora + "] Iniciando ronda de pulsaciones...");
-        System.out.println("-------------------------------------------");
+        log.info("Iniciando ronda de pulsaciones a las {}.", ahora);
 
         List<Unidad> activas = getUnidadesActivas();
 
         if (activas.isEmpty()) {
-            System.out.println("[Scheduler] No hay unidades activas. Deteniendo.");
+            log.warn("No hay unidades activas. Deteniendo scheduler.");
             detener();
             return;
         }
@@ -148,15 +152,12 @@ public class FleetScheduler {
                 soapService.enviarPulsacion(unidad);
                 enviadas++;
             } else {
-                System.out.println("[" + unidad.getNumUnidad() + 
-                        "] Fuera de horario (" + unidad.getHoraInicio() + 
-                        "-" + unidad.getHoraFin() + ") — omitida.");
+                log.debug("[{}] Fuera de horario ({}-{}) — omitida.",
+                        unidad.getNumUnidad(), unidad.getHoraInicio(), unidad.getHoraFin());
             }
         }
 
-        System.out.println("-------------------------------------------");
-        System.out.println("[Scheduler] Ronda completada — " + enviadas + 
-                " pulsaciones enviadas. Próxima en " + INTERVALO_MINUTOS + " min.\n");
+        log.info("Ronda completada — {} pulsaciones enviadas. Proxima en {} min.", enviadas, INTERVALO_MINUTOS);
     }
 
     // ---------------------------------------------------------------
@@ -230,7 +231,7 @@ public class FleetScheduler {
      * Gracefully shuts down the pulse scheduler.
      */
     public void detener() {
-        System.out.println("[Scheduler] Deteniendo servicio...");
+        log.info("Deteniendo servicio...");
         executor.shutdown();
         try {
             if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
@@ -240,6 +241,6 @@ public class FleetScheduler {
             executor.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        System.out.println("[Scheduler] Servicio detenido correctamente.");
+        log.info("Servicio detenido correctamente.");
     }
 }
