@@ -1,7 +1,11 @@
 services:
   fleet-tracker:
+    container_name: fleet-pulse-service
     build: .
     stdin_open: true
     tty: true
+    environment:
+      - TZ=America/Mexico_City
     volumes:
       - ./config.properties:/app/config.properties
+      - ./logs:/app/logs
