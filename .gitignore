@@ -50,3 +50,13 @@ hs_err_pid*
 replay_pid*
 *.ctxt
 .mtj.tmp/
+
+# ==========================================
+# Artefactos de Docker BuildKit y terminal
+# ==========================================
+=
+\[internal\]
+transferring
+
+# Directorio vacío creado por Docker bind mount cuando config.properties no existe como archivo
+config.properties/
