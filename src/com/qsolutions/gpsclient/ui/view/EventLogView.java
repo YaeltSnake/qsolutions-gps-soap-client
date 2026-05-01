@@ -1,5 +1,6 @@
 package com.qsolutions.gpsclient.ui.view;
 
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -13,19 +14,22 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
 /**
  * Event log panel showing a live table of GPS pulse activity.
  *
  * <p>Displays the most recent pulse events from all fleet units.  New events
- * can be pushed at runtime via {@link #agregarEvento(EventoLog)}.</p>
+ * can be pushed at runtime via {@link #agregarEvento(String, String, String)}.</p>
  */
 public class EventLogView {
 
     private final VBox root;
-    private final ObservableList<EventoLog> items = FXCollections.observableArrayList();
+    private final ObservableList<EventoLog> eventos = FXCollections.observableArrayList();
 
     /**
-     * Constructs the event log panel and pre-loads five sample rows.
+     * Constructs the event log panel and pre-loads ten sample rows.
      */
     public EventLogView() {
         TableView<EventoLog> table = buildTable();
@@ -36,7 +40,6 @@ public class EventLogView {
         root.setPrefHeight(240);
         VBox.setVgrow(table, Priority.ALWAYS);
 
-        preloadSampleData();
     }
 
     /**
@@ -49,13 +52,22 @@ public class EventLogView {
     }
 
     /**
-     * Inserts a new event at the top of the table so the most recent pulse is
-     * always visible without scrolling.
+     * Inserts a new event at the top of the table, thread-safe.
+     * Trims the list to a maximum of 50 entries.
      *
-     * @param evento the event to add; must not be {@code null}
+     * @param unidad   unit name
+     * @param estado   result status (e.g. {@code "✓ Enviado"})
+     * @param detalles detail message or error description
      */
-    public void agregarEvento(EventoLog evento) {
-        items.add(0, evento);
+    public void agregarEvento(String unidad, String estado, String detalles) {
+        String hora = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        EventoLog evento = new EventoLog(hora, unidad, estado, detalles);
+        Platform.runLater(() -> {
+            eventos.add(0, evento);
+            while (eventos.size() > 50) {
+                eventos.remove(eventos.size() - 1);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -94,7 +106,7 @@ public class EventLogView {
         colDetalles.setCellValueFactory(new PropertyValueFactory<>("detalles"));
         colDetalles.setMaxWidth(Double.MAX_VALUE);
 
-        TableView<EventoLog> table = new TableView<>(items);
+        TableView<EventoLog> table = new TableView<>(eventos);
         table.getColumns().addAll(colHora, colUnidad, colEstado, colDetalles);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
@@ -103,21 +115,6 @@ public class EventLogView {
         table.setPlaceholder(placeholder);
 
         return table;
-    }
-
-    private void preloadSampleData() {
-        items.addAll(
-            new EventoLog("12:32:15", "Peugeot",  "✓ Enviado",      "GPS pulse: -17.05, -101.23"),
-            new EventoLog("12:31:20", "Kangoo",   "✓ Enviado",      "GPS pulse: -17.06, -101.24"),
-            new EventoLog("12:30:45", "Tr-02",    "⚠ Reintentando", "Timeout: 5000ms"),
-            new EventoLog("12:29:30", "Attitude", "✓ Enviado",      "GPS pulse: -17.04, -101.22"),
-            new EventoLog("12:28:15", "Sentra",   "✗ Error",        "Connection refused"),
-            new EventoLog("12:27:00", "Peugeot",  "✓ Enviado",      "GPS pulse: -17.05, -101.23"),
-            new EventoLog("12:25:45", "Kangoo",   "✓ Enviado",      "GPS pulse: -17.06, -101.24"),
-            new EventoLog("12:24:30", "Tr-02",    "✓ Enviado",      "GPS pulse: -17.05, -101.23"),
-            new EventoLog("12:23:15", "Attitude", "✓ Enviado",      "GPS pulse: -17.04, -101.22"),
-            new EventoLog("12:22:00", "Sentra",   "⚠ Reintentando", "Timeout: 5000ms")
-        );
     }
 
     // -------------------------------------------------------------------------

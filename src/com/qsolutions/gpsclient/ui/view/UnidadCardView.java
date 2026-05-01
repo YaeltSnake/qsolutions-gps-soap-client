@@ -1,7 +1,10 @@
 package com.qsolutions.gpsclient.ui.view;
 
+import com.qsolutions.gpsclient.model.Unidad;
+import com.qsolutions.gpsclient.service.GpsSoapService;
 import com.qsolutions.gpsclient.ui.animation.CardAnimations;
 import javafx.animation.Timeline;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -12,104 +15,144 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import org.tempuri.Protocolo;
+
+import java.time.format.DateTimeFormatter;
 
 /**
  * Reusable card component representing a single fleet unit.
  *
- * <p>Displays the unit name, schedule, last-pulse timestamp, next-pulse
- * countdown with a progress bar, and quick-action buttons.  The card
- * applies {@code card-active} styling when the unit is active, and
- * {@code card-secondary} when inactive.</p>
- *
- * <p>Active cards fade in on construction and run a live countdown timer
- * on the progress bar.</p>
+ * <p>Three visual states driven by {@link #isOperacional()}:</p>
+ * <ul>
+ *   <li>Operational (active + coords set) — green border, countdown running.</li>
+ *   <li>Unconfigured (no coords) — orange border, countdown paused.</li>
+ *   <li>Inactive (coords set but not active) — grey border, countdown paused.</li>
+ * </ul>
  */
 public class UnidadCardView {
 
-    private final VBox root;
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
+    private static final GpsSoapService gpsService = new GpsSoapService();
 
-    // Promoted to instance fields so the countdown timer can update them
-    private Label labelSegundos;
+    private final Unidad       unidad;
+    private final EventLogView eventLog;
+    private final VBox         root;
+
+    private Label       labelEstado;
+    private Label       labelSegundos;
     private ProgressBar progressBar;
+    private Button      btnTestPulso;
+
+    private boolean  seleccionado  = false;
+    private Runnable onEditRequest;
 
     /**
-     * Constructs a card for the given fleet unit.
+     * Constructs a card bound to the given {@link Unidad}.
      *
-     * @param nombreUnidad  display name of the unit (e.g. {@code "Peugeot"})
-     * @param horarioInicio schedule start time or {@code "Manual"}
-     * @param horarioFin    schedule end time or {@code "Manual"}
-     * @param tipoHorario   schedule type label (e.g. {@code "Manager"})
-     * @param activa        {@code true} if the unit is currently active
+     * @param unidad   the fleet unit to display; must not be {@code null}
+     * @param eventLog the shared event log panel; must not be {@code null}
      */
-    public UnidadCardView(String nombreUnidad,
-                          String horarioInicio,
-                          String horarioFin,
-                          String tipoHorario,
-                          boolean activa) {
-        root = buildCard(nombreUnidad, horarioInicio, horarioFin, tipoHorario, activa);
+    public UnidadCardView(Unidad unidad, EventLogView eventLog) {
+        this.unidad   = unidad;
+        this.eventLog = eventLog;
+        this.root     = buildCard();
 
-        if (activa) {
+        attachActivaListener();
+
+        if (isOperacional()) {
             CardAnimations.fadeIn(root, 400);
             Timeline timer = CardAnimations.createCountdownTimer(labelSegundos, progressBar, 900);
             timer.play();
+        } else {
+            labelSegundos.setText("—");
+            labelSegundos.setStyle("-fx-text-fill: -color-text-tertiary;");
+            progressBar.setProgress(0);
+            progressBar.setStyle("-fx-accent: -color-text-tertiary;");
         }
     }
 
-    /**
-     * Returns the root {@link VBox} node ready to be added to a parent layout.
-     *
-     * @return the assembled card node
-     */
-    public VBox getRoot() {
-        return root;
+    /** @return the model object backing this card */
+    public Unidad getUnidad() { return unidad; }
+
+    /** @return the root {@link VBox} ready to be placed in a parent layout */
+    public VBox getRoot() { return root; }
+
+    public void setSeleccionado(boolean sel) {
+        this.seleccionado = sel;
+        if (sel) {
+            if (!root.getStyleClass().contains("card-selected")) {
+                root.getStyleClass().add("card-selected");
+            }
+        } else {
+            root.getStyleClass().remove("card-selected");
+        }
+    }
+
+    public void setOnEditRequest(Runnable handler) {
+        this.onEditRequest = handler;
     }
 
     // -------------------------------------------------------------------------
-    // Private builder
+    // Builder
     // -------------------------------------------------------------------------
 
-    private VBox buildCard(String nombre,
-                           String inicio,
-                           String fin,
-                           String tipo,
-                           boolean activa) {
+    private VBox buildCard() {
         VBox card = new VBox(8);
-        card.getStyleClass().addAll("card", activa ? "card-active" : "card-secondary");
+        String initialState = isOperacional() ? "card-active"
+                : (unidad.getLatitud() == null || unidad.getLongitud() == null) ? "card-warning"
+                : "card-secondary";
+        card.getStyleClass().addAll("card", initialState);
         card.setMaxWidth(Double.MAX_VALUE);
 
         card.getChildren().addAll(
-                buildHeader(nombre, activa),
-                buildScheduleLabel(inicio, fin, tipo),
+                buildHeader(),
+                buildScheduleLabel(),
                 new Separator(),
                 buildLastPulse(),
                 buildCountdown(),
                 buildActions()
         );
-
         return card;
     }
 
-    private HBox buildHeader(String nombre, boolean activa) {
-        Label lblNombre = new Label(nombre);
+    private HBox buildHeader() {
+        Label lblNombre = new Label(unidad.getNumUnidad());
         lblNombre.getStyleClass().add("label-title");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Label lblEstado = new Label(activa ? "● Activa" : "○ Inactiva");
-        lblEstado.getStyleClass().add(activa ? "label-success" : "label-secondary");
+        String textoEstado;
+        String claseEstado;
+        if (isOperacional()) {
+            textoEstado = "● Activa";
+            claseEstado = "label-success";
+        } else if (unidad.getLatitud() == null || unidad.getLongitud() == null) {
+            textoEstado = "⚠ Sin configurar";
+            claseEstado = "label-warning";
+        } else {
+            textoEstado = "○ Inactiva";
+            claseEstado = "label-secondary";
+        }
+        labelEstado = new Label(textoEstado);
+        labelEstado.getStyleClass().add(claseEstado);
 
-        HBox header = new HBox(8, lblNombre, spacer, lblEstado);
+        HBox header = new HBox(8, lblNombre, spacer, labelEstado);
         header.setAlignment(Pos.CENTER_LEFT);
         return header;
     }
 
-    private Label buildScheduleLabel(String inicio, String fin, String tipo) {
-        boolean manual = "Manual".equalsIgnoreCase(inicio);
-        String texto = manual
-                ? "Manual · " + tipo
-                : inicio + " — " + fin + " · " + tipo;
-
+    private Label buildScheduleLabel() {
+        String tipo = unidad.isHorarioFijo() ? "Manager" : "Operador";
+        String texto;
+        if (unidad.isHorarioFijo()) {
+            texto = unidad.getHoraInicio().format(TIME_FMT)
+                  + " — "
+                  + unidad.getHoraFin().format(TIME_FMT)
+                  + " · " + tipo;
+        } else {
+            texto = "Manual · " + tipo;
+        }
         Label lbl = new Label(texto);
         lbl.getStyleClass().add("label-secondary");
         return lbl;
@@ -132,7 +175,6 @@ public class UnidadCardView {
         header.getStyleClass().add("label-secondary");
         header.setStyle("-fx-font-size: 11px;");
 
-        // Assigned to instance fields so the timeline can update them
         labelSegundos = new Label("en 900 seg");
         labelSegundos.setStyle("-fx-text-fill: -color-text-primary; -fx-font-size: 12px;");
 
@@ -149,12 +191,115 @@ public class UnidadCardView {
         btnEditar.getStyleClass().add("btn-secondary");
         btnEditar.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(btnEditar, Priority.ALWAYS);
+        btnEditar.setOnAction(e -> { if (onEditRequest != null) onEditRequest.run(); });
 
-        Button btnTest = new Button("Test pulso");
-        btnTest.getStyleClass().add("btn-success");
-        btnTest.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(btnTest, Priority.ALWAYS);
+        btnTestPulso = new Button("Test pulso");
+        btnTestPulso.getStyleClass().add("btn-success");
+        btnTestPulso.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(btnTestPulso, Priority.ALWAYS);
 
-        return new HBox(8, btnEditar, btnTest);
+        btnTestPulso.setOnAction(e -> {
+            System.out.println("[Test Pulso Card] Unidad: " + unidad.getNumUnidad()
+                    + " | Lat: " + unidad.getLatitud()
+                    + " | Lon: " + unidad.getLongitud()
+                    + " | Activa: " + unidad.isActiva());
+
+            if (unidad.getLatitud() == null || unidad.getLongitud() == null) {
+                eventLog.agregarEvento(unidad.getNumUnidad(), "✗ Error",
+                        "Sin coordenadas configuradas");
+                return;
+            }
+
+            btnTestPulso.setText("Enviando...");
+            btnTestPulso.setDisable(true);
+
+            Task<Protocolo> task = new Task<>() {
+                @Override
+                protected Protocolo call() {
+                    return gpsService.enviarPulsacion(unidad);
+                }
+            };
+
+            task.setOnSucceeded(ev -> {
+                Protocolo respuesta = task.getValue();
+                btnTestPulso.setText("Test pulso");
+                btnTestPulso.setDisable(false);
+
+                if (respuesta != null && respuesta.isProcessed()) {
+                    eventLog.agregarEvento(
+                            unidad.getNumUnidad(),
+                            "✓ Enviado",
+                            "GPS pulse: " + unidad.getLatitud() + ", " + unidad.getLongitud()
+                    );
+                } else if (respuesta != null) {
+                    eventLog.agregarEvento(
+                            unidad.getNumUnidad(),
+                            "⚠ Rechazado",
+                            respuesta.getMessage() != null ? respuesta.getMessage() : "Sin mensaje del servidor"
+                    );
+                } else {
+                    eventLog.agregarEvento(
+                            unidad.getNumUnidad(),
+                            "✗ Error",
+                            "Conexión fallida con QSolutions"
+                    );
+                }
+            });
+
+            task.setOnFailed(ev -> {
+                btnTestPulso.setText("Test pulso");
+                btnTestPulso.setDisable(false);
+                Throwable ex = task.getException();
+                eventLog.agregarEvento(
+                        unidad.getNumUnidad(),
+                        "✗ Error",
+                        ex != null ? ex.getMessage() : "Error desconocido"
+                );
+            });
+
+            Thread thread = new Thread(task);
+            thread.setDaemon(true);
+            thread.start();
+        });
+
+        return new HBox(8, btnEditar, btnTestPulso);
+    }
+
+    // -------------------------------------------------------------------------
+    // State helpers
+    // -------------------------------------------------------------------------
+
+    private boolean isOperacional() {
+        return unidad.isActiva()
+                && unidad.getLatitud() != null
+                && unidad.getLongitud() != null;
+    }
+
+    private void attachActivaListener() {
+        unidad.activaProperty().addListener((obs, oldVal, newVal) -> refrescarEstado());
+        unidad.latitudProperty().addListener((obs, oldVal, newVal) -> refrescarEstado());
+        unidad.longitudProperty().addListener((obs, oldVal, newVal) -> refrescarEstado());
+    }
+
+    private void refrescarEstado() {
+        if (isOperacional()) {
+            root.getStyleClass().remove("card-secondary");
+            root.getStyleClass().remove("card-warning");
+            if (!root.getStyleClass().contains("card-active")) root.getStyleClass().add("card-active");
+            labelEstado.setText("● Activa");
+            labelEstado.getStyleClass().setAll("label-success");
+        } else if (unidad.getLatitud() == null || unidad.getLongitud() == null) {
+            root.getStyleClass().remove("card-active");
+            root.getStyleClass().remove("card-secondary");
+            if (!root.getStyleClass().contains("card-warning")) root.getStyleClass().add("card-warning");
+            labelEstado.setText("⚠ Sin configurar");
+            labelEstado.getStyleClass().setAll("label-warning");
+        } else {
+            root.getStyleClass().remove("card-active");
+            root.getStyleClass().remove("card-warning");
+            if (!root.getStyleClass().contains("card-secondary")) root.getStyleClass().add("card-secondary");
+            labelEstado.setText("○ Inactiva");
+            labelEstado.getStyleClass().setAll("label-secondary");
+        }
     }
 }

@@ -16,16 +16,24 @@ import java.util.List;
  */
 public class FleetConfig {
 
-    public static List<Unidad> getUnidades() {
-        return Arrays.asList(
-            // Fixed schedule — pre-approved by fleet manager
-            new Unidad("Peugeot", LocalTime.of(6, 0),  LocalTime.of(16, 0)),
-            new Unidad("Kangoo",  LocalTime.of(7, 0),  LocalTime.of(17, 0)),
-            new Unidad("Tr-02",   LocalTime.of(7, 0),  LocalTime.of(17, 0)),
+    private static final List<Unidad> UNIDADES = Arrays.asList(
+        new Unidad("Peugeot", LocalTime.of(6, 0),  LocalTime.of(16, 0)),
+        new Unidad("Kangoo",  LocalTime.of(7, 0),  LocalTime.of(17, 0)),
+        new Unidad("Tr-02",   LocalTime.of(7, 0),  LocalTime.of(17, 0)),
+        new Unidad("Attitude"),
+        new Unidad("Sentra")
+    );
 
-            // Manual schedule — operator configures at session start
-            new Unidad("Attitude"),
-            new Unidad("Sentra")
-        );
+    public static List<Unidad> getUnidades() {
+        return UNIDADES;
     }
+
+    public static Unidad getByName(String numUnidad) {
+        return UNIDADES.stream()
+                .filter(u -> u.getNumUnidad().equals(numUnidad))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private FleetConfig() {}
 }

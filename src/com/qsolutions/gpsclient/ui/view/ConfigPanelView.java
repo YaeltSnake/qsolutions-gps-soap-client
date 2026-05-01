@@ -1,7 +1,11 @@
 package com.qsolutions.gpsclient.ui.view;
 
+import com.qsolutions.gpsclient.config.FleetConfig;
+import com.qsolutions.gpsclient.model.Unidad;
+import com.qsolutions.gpsclient.service.GpsSoapService;
 import com.qsolutions.gpsclient.ui.validator.CoordinateValidator;
 import javafx.collections.FXCollections;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -12,8 +16,11 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import org.tempuri.Protocolo;
 
-import java.util.Map;
+import java.math.BigDecimal;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.function.Predicate;
 
 /**
@@ -32,7 +39,10 @@ public class ConfigPanelView {
     // Instance fields (need cross-listener access)
     // -------------------------------------------------------------------------
 
+    private static final GpsSoapService gpsService = new GpsSoapService();
+
     private final VBox root;
+    private final EventLogView eventLog;
 
     private ComboBox<String> comboUnidad;
     private TextField tfInicio;
@@ -43,27 +53,31 @@ public class ConfigPanelView {
     private Button btnTest;
     private Button btnGuardar;
 
-    // Unit presets: name → [inicio, fin, lat, lon]
-    private static final Map<String, String[]> PRESETS = Map.of(
-        "Peugeot",  new String[]{"06:00", "16:00", "-17.0526", "-101.2345"},
-        "Kangoo",   new String[]{"07:00", "17:00", "-17.0612", "-101.2400"},
-        "Tr-02",    new String[]{"07:00", "17:00", "-17.0589", "-101.2378"},
-        "Attitude", new String[]{"Manual", "Manual", "", ""},
-        "Sentra",   new String[]{"Manual", "Manual", "", ""}
-    );
+    private Label labelTipoHorario;
+
+    private java.util.function.Consumer<Unidad> onUnidadSeleccionada;
 
     /**
      * Constructs the configuration panel, assembles all form sections, and
      * attaches validation and action listeners.
+     *
+     * @param eventLog the shared event log panel; must not be {@code null}
      */
-    public ConfigPanelView() {
+    public ConfigPanelView(EventLogView eventLog) {
+        this.eventLog = eventLog;
         root = new VBox(16);
         root.setPadding(new Insets(16));
+
+        labelTipoHorario = new Label("");
+        labelTipoHorario.setVisible(false);
+        labelTipoHorario.setManaged(false);
+        labelTipoHorario.getStyleClass().add("badge-schedule");
 
         root.getChildren().addAll(
                 buildHeader(),
                 new Separator(),
                 buildUnitSelector(),
+                labelTipoHorario,
                 buildScheduleSection(),
                 buildCoordinatesSection(),
                 buildActions()
@@ -79,6 +93,14 @@ public class ConfigPanelView {
      */
     public VBox getRoot() {
         return root;
+    }
+
+    public void seleccionarUnidad(Unidad u) {
+        comboUnidad.setValue(u.getNumUnidad());
+    }
+
+    public void setOnUnidadSeleccionada(java.util.function.Consumer<Unidad> handler) {
+        this.onUnidadSeleccionada = handler;
     }
 
     // -------------------------------------------------------------------------
@@ -169,23 +191,119 @@ public class ConfigPanelView {
         attachValidation(tfLon,    CoordinateValidator::isValidLongitude);
 
         comboUnidad.valueProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal == null) return;
-            String[] preset = PRESETS.get(newVal);
-            if (preset == null) return;
-            tfInicio.setText(preset[0]);
-            tfFin.setText(preset[1]);
-            tfLat.setText(preset[2]);
-            tfLon.setText(preset[3]);
+            Unidad nuevaUnidad = newVal != null ? FleetConfig.getByName(newVal) : null;
+
+            if (nuevaUnidad == null) {
+                labelTipoHorario.setVisible(false);
+                labelTipoHorario.setManaged(false);
+                tfInicio.setDisable(false);
+                tfFin.setDisable(false);
+                return;
+            }
+
+            labelTipoHorario.setVisible(true);
+            labelTipoHorario.setManaged(true);
+
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm");
+
+            if (nuevaUnidad.isHorarioFijo()) {
+                labelTipoHorario.setText("● Horario fijo (Manager) — no editable");
+                labelTipoHorario.getStyleClass().setAll("badge-schedule", "badge-schedule-fixed");
+                tfInicio.setText(nuevaUnidad.getHoraInicio().format(fmt));
+                tfFin.setText(nuevaUnidad.getHoraFin().format(fmt));
+                tfInicio.setDisable(true);
+                tfFin.setDisable(true);
+            } else {
+                labelTipoHorario.setText("● Horario manual (Operador) — editable");
+                labelTipoHorario.getStyleClass().setAll("badge-schedule", "badge-schedule-manual");
+                tfInicio.setText(nuevaUnidad.getHoraInicio() != null ? nuevaUnidad.getHoraInicio().format(fmt) : "");
+                tfFin.setText(nuevaUnidad.getHoraFin() != null ? nuevaUnidad.getHoraFin().format(fmt) : "");
+                tfInicio.setDisable(false);
+                tfFin.setDisable(false);
+            }
+
+            tfLat.setText(nuevaUnidad.getLatitud() != null ? nuevaUnidad.getLatitud().toString() : "");
+            tfLon.setText(nuevaUnidad.getLongitud() != null ? nuevaUnidad.getLongitud().toString() : "");
+
+            if (onUnidadSeleccionada != null) {
+                onUnidadSeleccionada.accept(nuevaUnidad);
+            }
         });
 
         btnGuardar.setOnAction(e -> {
-            if (!allFieldsValid()) return;
-            System.out.println("Guardando: "
-                    + comboUnidad.getValue() + " "
-                    + tfInicio.getText() + " "
-                    + tfFin.getText() + " "
-                    + tfLat.getText() + " "
-                    + tfLon.getText());
+            String nombre = comboUnidad.getValue();
+            if (nombre == null) {
+                System.out.println("[Guardar] No hay unidad seleccionada");
+                if (eventLog != null) {
+                    eventLog.agregarEvento("Sistema", "⚠ Aviso", "Selecciona una unidad antes de guardar");
+                }
+                return;
+            }
+            Unidad sel = FleetConfig.getByName(nombre);
+            if (sel == null) return;
+
+            StringBuilder cambios = new StringBuilder();
+            boolean huboError = false;
+
+            // 1. Guardar coordenadas SIEMPRE (independiente de horario fijo o manual)
+            try {
+                if (tfLat.getText() != null && !tfLat.getText().trim().isEmpty()) {
+                    BigDecimal lat = new BigDecimal(tfLat.getText().trim());
+                    sel.setLatitud(lat);
+                    cambios.append("lat=").append(lat).append(" ");
+                }
+            } catch (NumberFormatException ex) {
+                System.out.println("[Guardar] Error parseando latitud: " + ex.getMessage());
+                huboError = true;
+            }
+
+            try {
+                if (tfLon.getText() != null && !tfLon.getText().trim().isEmpty()) {
+                    BigDecimal lon = new BigDecimal(tfLon.getText().trim());
+                    sel.setLongitud(lon);
+                    cambios.append("lon=").append(lon).append(" ");
+                }
+            } catch (NumberFormatException ex) {
+                System.out.println("[Guardar] Error parseando longitud: " + ex.getMessage());
+                huboError = true;
+            }
+
+            // 2. Solo guardar horarios si NO es horario fijo
+            if (!sel.isHorarioFijo()) {
+                try {
+                    if (tfInicio.getText() != null && !tfInicio.getText().trim().isEmpty()) {
+                        LocalTime ini = LocalTime.parse(tfInicio.getText().trim());
+                        sel.setHoraInicio(ini);
+                        cambios.append("inicio=").append(ini).append(" ");
+                    }
+                    if (tfFin.getText() != null && !tfFin.getText().trim().isEmpty()) {
+                        LocalTime fin = LocalTime.parse(tfFin.getText().trim());
+                        sel.setHoraFin(fin);
+                        cambios.append("fin=").append(fin).append(" ");
+                    }
+                } catch (Exception ex) {
+                    System.out.println("[Guardar] Error parseando horario: " + ex.getMessage());
+                    huboError = true;
+                }
+            }
+
+            // 3. Activar la unidad
+            sel.setActiva(true);
+
+            // 4. Log en consola para diagnóstico
+            System.out.println("[Guardar] Unidad final: " + sel);
+            System.out.println("[Guardar] Lat actual: " + sel.getLatitud() + " | Lon actual: " + sel.getLongitud());
+
+            // 5. Feedback en UI
+            if (eventLog != null) {
+                if (huboError) {
+                    eventLog.agregarEvento(sel.getNumUnidad(), "⚠ Guardado parcial",
+                            "Algunos campos no se pudieron parsear");
+                } else {
+                    eventLog.agregarEvento(sel.getNumUnidad(), "✓ Guardado",
+                            "Configuración actualizada: " + cambios.toString().trim());
+                }
+            }
         });
 
         btnCancelar.setOnAction(e -> {
@@ -194,11 +312,80 @@ public class ConfigPanelView {
             tfFin.clear();
             tfLat.clear();
             tfLon.clear();
+            tfInicio.setDisable(false);
+            tfFin.setDisable(false);
+            labelTipoHorario.setVisible(false);
+            labelTipoHorario.setManaged(false);
         });
 
         btnTest.setOnAction(e -> {
-            String unidad = comboUnidad.getValue();
-            System.out.println("Test pulso para: " + (unidad != null ? unidad : "(sin unidad)"));
+            String nombreUnidad = comboUnidad.getValue();
+            if (nombreUnidad == null) {
+                eventLog.agregarEvento("Panel", "✗ Error", "Sin unidad seleccionada");
+                return;
+            }
+
+            Unidad unidadSel = FleetConfig.getByName(nombreUnidad);
+            if (unidadSel == null) {
+                eventLog.agregarEvento("Panel", "✗ Error", "Unidad no encontrada");
+                return;
+            }
+
+            if (unidadSel.getLatitud() == null || unidadSel.getLongitud() == null) {
+                eventLog.agregarEvento(nombreUnidad, "✗ Error", "Sin coordenadas configuradas");
+                return;
+            }
+
+            btnTest.setText("Enviando...");
+            btnTest.setDisable(true);
+
+            Task<Protocolo> task = new Task<>() {
+                @Override
+                protected Protocolo call() {
+                    return gpsService.enviarPulsacion(unidadSel);
+                }
+            };
+
+            task.setOnSucceeded(ev -> {
+                Protocolo respuesta = task.getValue();
+                btnTest.setText("Test pulso");
+                btnTest.setDisable(false);
+
+                if (respuesta != null && respuesta.isProcessed()) {
+                    eventLog.agregarEvento(
+                            nombreUnidad,
+                            "✓ Enviado",
+                            "GPS pulse: " + unidadSel.getLatitud() + ", " + unidadSel.getLongitud()
+                    );
+                } else if (respuesta != null) {
+                    eventLog.agregarEvento(
+                            nombreUnidad,
+                            "⚠ Rechazado",
+                            respuesta.getMessage() != null ? respuesta.getMessage() : "Sin mensaje del servidor"
+                    );
+                } else {
+                    eventLog.agregarEvento(
+                            nombreUnidad,
+                            "✗ Error",
+                            "Conexión fallida con QSolutions"
+                    );
+                }
+            });
+
+            task.setOnFailed(ev -> {
+                btnTest.setText("Test pulso");
+                btnTest.setDisable(false);
+                Throwable ex = task.getException();
+                eventLog.agregarEvento(
+                        nombreUnidad,
+                        "✗ Error",
+                        ex != null ? ex.getMessage() : "Error desconocido"
+                );
+            });
+
+            Thread thread = new Thread(task);
+            thread.setDaemon(true);
+            thread.start();
         });
     }
 

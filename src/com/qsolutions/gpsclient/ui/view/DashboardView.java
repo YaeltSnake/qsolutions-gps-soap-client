@@ -1,5 +1,7 @@
 package com.qsolutions.gpsclient.ui.view;
 
+import com.qsolutions.gpsclient.config.FleetConfig;
+import com.qsolutions.gpsclient.model.Unidad;
 import com.qsolutions.gpsclient.ui.animation.CardAnimations;
 import javafx.geometry.Insets;
 import javafx.scene.control.Label;
@@ -10,6 +12,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Root view of the Fleet Tracker dashboard.
@@ -25,11 +30,17 @@ import javafx.scene.layout.VBox;
 public class DashboardView {
 
     private final BorderPane root;
+    private Label labelContador;
+
+    private final List<UnidadCardView> cardViews = new ArrayList<>();
+    private ConfigPanelView configPanel;
+    private EventLogView eventLogView;
 
     /**
      * Constructs the dashboard and assembles all layout regions.
      */
     public DashboardView() {
+        eventLogView = new EventLogView();
         root = new BorderPane();
         root.setTop(buildHeader());
         root.setLeft(buildUnitPanel());
@@ -47,6 +58,10 @@ public class DashboardView {
         return root;
     }
 
+    public EventLogView getEventLog() {
+        return eventLogView;
+    }
+
     // -------------------------------------------------------------------------
     // Region builders
     // -------------------------------------------------------------------------
@@ -58,10 +73,10 @@ public class DashboardView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Label unitCount = new Label("5 unidades activas");
-        unitCount.getStyleClass().add("label-secondary");
+        labelContador = new Label();
+        labelContador.getStyleClass().add("label-secondary");
 
-        HBox titleBar = new HBox(12, title, spacer, unitCount);
+        HBox titleBar = new HBox(12, title, spacer, labelContador);
 
         StatisticsCardView stats = new StatisticsCardView();
 
@@ -72,23 +87,29 @@ public class DashboardView {
     }
 
     private ScrollPane buildUnitPanel() {
-        VBox cards = new VBox(12);
-        cards.setPadding(new Insets(16));
+        VBox leftPanel = new VBox(12);
+        leftPanel.setPadding(new Insets(16));
 
-        UnidadCardView[] unidades = {
-            new UnidadCardView("Peugeot",  "06:00", "16:00", "Manager",  true),
-            new UnidadCardView("Kangoo",   "07:00", "17:00", "Manager",  true),
-            new UnidadCardView("Tr-02",    "07:00", "17:00", "Manager",  true),
-            new UnidadCardView("Attitude", "Manual", "Manual", "Operador", false),
-            new UnidadCardView("Sentra",   "Manual", "Manual", "Operador", false),
-        };
-        for (int i = 0; i < unidades.length; i++) {
-            VBox cardRoot = unidades[i].getRoot();
-            CardAnimations.fadeInWithDelay(cardRoot, 400, i * 100);
-            cards.getChildren().add(cardRoot);
+        List<Unidad> unidades = FleetConfig.getUnidades();
+
+        for (int i = 0; i < unidades.size(); i++) {
+            Unidad u = unidades.get(i);
+            UnidadCardView card = new UnidadCardView(u, eventLogView);
+            card.setOnEditRequest(() -> configPanel.seleccionarUnidad(u));
+            cardViews.add(card);
+            leftPanel.getChildren().add(card.getRoot());
+            CardAnimations.fadeInWithDelay(card.getRoot(), 400, i * 100);
         }
 
-        ScrollPane scroll = new ScrollPane(cards);
+        for (Unidad u : unidades) {
+            u.activaProperty().addListener((obs, oldVal, newVal) -> actualizarContador());
+            u.latitudProperty().addListener((obs, oldVal, newVal) -> actualizarContador());
+            u.longitudProperty().addListener((obs, oldVal, newVal) -> actualizarContador());
+        }
+
+        actualizarContador();
+
+        ScrollPane scroll = new ScrollPane(leftPanel);
         scroll.setPrefWidth(340);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
@@ -98,12 +119,25 @@ public class DashboardView {
     }
 
     private VBox buildCenterPanel() {
-        ConfigPanelView configPanel = new ConfigPanelView();
+        configPanel = new ConfigPanelView(eventLogView);
+        configPanel.setOnUnidadSeleccionada(unidadSel -> {
+            for (UnidadCardView cv : cardViews) {
+                cv.setSeleccionado(cv.getUnidad().equals(unidadSel));
+            }
+        });
         return configPanel.getRoot();
     }
 
     private VBox buildEventLog() {
-        EventLogView eventLog = new EventLogView();
-        return eventLog.getRoot();
+        return eventLogView.getRoot();
+    }
+
+    private void actualizarContador() {
+        long operacionales = FleetConfig.getUnidades().stream()
+                .filter(u -> u.isActiva()
+                        && u.getLatitud() != null
+                        && u.getLongitud() != null)
+                .count();
+        labelContador.setText(operacionales + " unidades activas");
     }
 }

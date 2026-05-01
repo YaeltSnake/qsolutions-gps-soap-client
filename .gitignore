@@ -60,3 +60,6 @@ transferring
 
 # Directorio vacío creado por Docker bind mount cuando config.properties no existe como archivo
 config.properties/
+ 
+# Claude Code internal files 
+.claude/ 
