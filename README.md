@@ -13,7 +13,7 @@
 
 ---
 
-![Fleet Tracker UI](docs/screenshot.png)
+![Fleet Tracker UI](docs/screenshotv2.png)
 
 ---
 
