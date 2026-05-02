@@ -54,6 +54,7 @@ public class ConfigPanelView {
     private Button btnGuardar;
 
     private Label labelTipoHorario;
+    private boolean formBloqueado = false;
 
     private java.util.function.Consumer<Unidad> onUnidadSeleccionada;
 
@@ -228,6 +229,12 @@ public class ConfigPanelView {
             if (onUnidadSeleccionada != null) {
                 onUnidadSeleccionada.accept(nuevaUnidad);
             }
+
+            if (nuevaUnidad.getLatitud() != null && nuevaUnidad.getLongitud() != null) {
+                bloquearForm(true);
+            } else {
+                bloquearForm(false);
+            }
         });
 
         btnGuardar.setOnAction(e -> {
@@ -304,18 +311,36 @@ public class ConfigPanelView {
                             "Configuración actualizada: " + cambios.toString().trim());
                 }
             }
+
+            bloquearForm(true);
+            eventLog.agregarEvento(sel.getNumUnidad(), "🔒 Configurado",
+                "Configuración guardada — usa Cancelar para reconfigurar");
         });
 
         btnCancelar.setOnAction(e -> {
-            comboUnidad.setValue(null);
+            String nombre = comboUnidad.getValue();
+            Unidad sel = nombre != null ? FleetConfig.getByName(nombre) : null;
+            if (sel != null) {
+                sel.setLatitud(null);
+                sel.setLongitud(null);
+                if (!sel.isHorarioFijo()) {
+                    sel.setHoraInicio(null);
+                    sel.setHoraFin(null);
+                }
+            }
+
+            comboUnidad.getSelectionModel().clearSelection();
             tfInicio.clear();
             tfFin.clear();
             tfLat.clear();
             tfLon.clear();
-            tfInicio.setDisable(false);
-            tfFin.setDisable(false);
-            labelTipoHorario.setVisible(false);
-            labelTipoHorario.setManaged(false);
+
+            bloquearForm(false);
+
+            if (sel != null) {
+                eventLog.agregarEvento(sel.getNumUnidad(), "↺ Reset",
+                    "Configuración cancelada — puede reconfigurarse");
+            }
         });
 
         btnTest.setOnAction(e -> {
@@ -392,6 +417,24 @@ public class ConfigPanelView {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private void bloquearForm(boolean bloquear) {
+        this.formBloqueado = bloquear;
+
+        String nombre = comboUnidad.getValue();
+        Unidad sel = nombre != null ? FleetConfig.getByName(nombre) : null;
+        if (sel != null && !sel.isHorarioFijo()) {
+            tfInicio.setDisable(bloquear);
+            tfFin.setDisable(bloquear);
+        }
+
+        tfLat.setDisable(bloquear);
+        tfLon.setDisable(bloquear);
+        btnGuardar.setDisable(bloquear);
+        btnTest.setDisable(bloquear);
+
+        btnCancelar.setDisable(false);
+    }
 
     private void attachValidation(TextField field, Predicate<String> validator) {
         field.textProperty().addListener((obs, oldVal, newVal) -> {
